@@ -224,12 +224,55 @@ long-running process. The browser version is therefore compiled to
 **WebAssembly** with [pygbag](https://pypi.org/project/pygbag/), which produces
 a static site that any host can serve.
 
-Rebuild and redeploy after changing the game:
+### Deploying
+
+Vercel builds the game itself — `vercel.json` points at `build_vercel.sh`,
+which installs pygbag and runs `build_web.py` inside Vercel's container. You
+never have to build the web version by hand just to publish it.
+
+**Automatic (set up already): just push.** A `pre-push` git hook deploys to
+production every time you `git push`:
 
 ```bash
-python3 -m pip install pygbag           # one time
-python3 build_web.py                    # writes ./zombie-war-web/
-cd zombie-war-web && vercel deploy --prod
+git add -A && git commit -m "what changed" && git push     # deploys itself
+```
+
+If you ever clone this repo fresh, re-install the hook with:
+
+```bash
+bash install_hooks.sh          # turn it off again with: rm .git/hooks/pre-push
+```
+
+The hook runs the Vercel CLI on your own machine, so Vercel needs no access to
+GitHub and no access tokens are stored anywhere. A failed deploy never blocks
+the push.
+
+**Manual, any time:**
+
+```bash
+vercel deploy --prod           # from the project root
+```
+
+**Building the web version locally** (to test in a browser before publishing):
+
+```bash
+python3 -m pip install pygbag
+python3 build_web.py           # writes ./zombie-war-web/
+```
+
+**Optional: deploy from GitHub's servers instead of your machine.**
+`docs/github-actions-vercel-deploy.yml` is a ready-made GitHub Actions workflow
+that does the same job in the cloud, again *without* connecting Vercel to
+GitHub. It needs two one-time steps, because adding workflow files requires an
+extra permission and the runner needs its own credential:
+
+```bash
+gh auth refresh -h github.com -s workflow            # allow workflow files
+mkdir -p .github/workflows
+cp docs/github-actions-vercel-deploy.yml .github/workflows/deploy.yml
+gh secret set VERCEL_TOKEN --repo stynerdev225/zombie-war   # paste a token from
+                                                            # vercel.com/account/tokens
+git add .github && git commit -m "Deploy from GitHub Actions" && git push
 ```
 
 `build_web.py` copies the game into `web_build/zombiewar/`, runs pygbag, and

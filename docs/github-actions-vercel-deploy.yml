@@ -1,0 +1,79 @@
+name: Deploy to Vercel
+
+# Deploys the game every time you push to main - without connecting Vercel to
+# GitHub. GitHub Actions simply runs the Vercel CLI, so Vercel never needs any
+# access to this repository.
+#
+# ONE-TIME SETUP
+# --------------
+# 1. Create a Vercel token:  https://vercel.com/account/tokens
+#      (name it "github-actions", scope it to your account, then copy it)
+# 2. Store it as a repository secret - run this locally, it will prompt you to
+#    paste the token so it never appears on screen or in a file:
+#
+#      gh secret set VERCEL_TOKEN --repo stynerdev225/zombie-war
+#
+# After that, every push to main builds and deploys automatically. You can also
+# trigger a deploy by hand from the repo's Actions tab ("Run workflow").
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # lets you deploy manually from the Actions tab
+
+# Never run two deploys at once; cancel an older one still in flight.
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # These two are project identifiers, not secrets - they only say *which*
+      # Vercel project to deploy to. The token is what grants access.
+      VERCEL_ORG_ID: team_f5VZ6W1NoUtY1zXbzYEBF6hG
+      VERCEL_PROJECT_ID: prj_gXUsJzSyAmWOKkdle2cpOfTHgQKR
+
+    steps:
+      - name: Check out the game
+        uses: actions/checkout@v4
+
+      - name: Fail early if the token is missing
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "::error::VERCEL_TOKEN secret is not set."
+            echo "Create a token at https://vercel.com/account/tokens then run:"
+            echo "  gh secret set VERCEL_TOKEN --repo ${{ github.repository }}"
+            exit 1
+          fi
+
+      - name: Install the Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy to production
+        # Vercel builds the WebAssembly bundle itself using vercel.json ->
+        # build_vercel.sh, so nothing needs to be pre-built here.
+        run: |
+          vercel deploy --prod --yes \
+            --token="${{ secrets.VERCEL_TOKEN }}" \
+            > deployment-url.txt
+          echo "Deployed: $(tail -1 deployment-url.txt)"
+          echo "### Zombie War deployed :video_game:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Play: <https://zombie-war-web.vercel.app>" >> "$GITHUB_STEP_SUMMARY"
+          echo "- This build: $(tail -1 deployment-url.txt)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the site is actually up
+        run: |
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://zombie-war-web.vercel.app/)
+            echo "attempt $attempt: HTTP $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 6
+          done
+          echo "::error::zombie-war-web.vercel.app did not return HTTP 200 after the deploy"
+          exit 1
