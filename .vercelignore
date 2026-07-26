@@ -1,0 +1,10 @@
+# Vercel builds the game itself (see vercel.json), so it only needs the source.
+.venv/
+venv/
+__pycache__/
+*.pyc
+web_build/
+zombie-war-web/
+scores.json
+.DS_Store
+.git/

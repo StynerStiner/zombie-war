@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "python3 -m pip install --quiet pygbag && python3 build_web.py",
+  "buildCommand": "bash build_vercel.sh",
   "outputDirectory": "zombie-war-web",
   "framework": null,
   "installCommand": "echo 'no npm dependencies - this is a Python project'",
