@@ -1,0 +1,3 @@
+# Zombie War - built by William
+# Only one dependency: Pygame.
+pygame>=2.5.0

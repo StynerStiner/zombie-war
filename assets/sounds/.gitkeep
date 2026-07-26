@@ -1,0 +1,2 @@
+# Drop optional .wav / .ogg sound overrides here (see assets/README.txt).
+# The game generates all of its audio in code, so this folder may stay empty.
