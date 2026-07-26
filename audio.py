@@ -93,6 +93,21 @@ def _mix(*layers):
     return out
 
 
+def _upsample2(samples):
+    """
+    Double the sample rate by repeating each sample.
+
+    The music loop is long, and generating it sample-by-sample in Python is the
+    slowest thing the game does - painfully so in the browser, where it runs
+    under WebAssembly.  Generating at half rate and duplicating is twice as
+    fast and inaudible on a slow drone.
+    """
+    out = [0.0] * (len(samples) * 2)
+    out[0::2] = samples
+    out[1::2] = samples
+    return out
+
+
 def _sequence(*chunks):
     """Play sample lists one after another."""
     out = []
@@ -315,6 +330,7 @@ class Audio:
         #   * a sparse minor-key bell melody with long decays, and
         #   * an occasional deep toll, like something distant in the jungle.
         beat = 60.0 / 58.0                     # slow, funeral-ish tempo
+        MR = SAMPLE_RATE // 2                  # generate at half rate (see _upsample2)
 
         # A natural minor progression: Am - F - Dm - E.
         roots = [55.00, 43.65, 36.71, 41.20]   # very low drone roots
@@ -332,35 +348,35 @@ class Audio:
         for index, root in enumerate(roots):
             # Two detuned drones per bar -> slow beating, very long swell.
             drone_track.extend(_mix(
-                _tone(root, bar, "sine", 0.15, attack=0.35, release=0.45),
-                _tone(root * 1.008, bar, "sine", 0.12, attack=0.40, release=0.45),
-                _tone(root * 2.0, bar, "sine", 0.05, attack=0.45, release=0.5)))
+                _tone(root, bar, "sine", 0.15, attack=0.35, release=0.45, rate=MR),
+                _tone(root * 1.008, bar, "sine", 0.12, attack=0.40, release=0.45, rate=MR),
+                _tone(root * 2.0, bar, "sine", 0.05, attack=0.45, release=0.5, rate=MR)))
 
             # Bells on the quarter notes that have a note defined.
             for note in bells[index]:
                 if note is None:
-                    bell_track.extend([0.0] * int(beat * SAMPLE_RATE))
+                    bell_track.extend([0.0] * int(beat * MR))
                 else:
                     hit = _mix(
                         _tone(note, beat * 0.95, "sine", 0.085,
-                              attack=0.006, release=0.92),
+                              attack=0.006, release=0.92, rate=MR),
                         _tone(note * 2.002, beat * 0.95, "sine", 0.025,
-                              attack=0.010, release=0.92))
+                              attack=0.010, release=0.92, rate=MR))
                     bell_track.extend(hit)
-                    pad = int(beat * SAMPLE_RATE) - len(hit)
+                    pad = int(beat * MR) - len(hit)
                     if pad > 0:
                         bell_track.extend([0.0] * pad)
 
             # One deep toll at the start of bars 1 and 3.
             if index % 2 == 0:
                 toll = _tone(73.42, beat * 1.6, "sine", 0.10,
-                             attack=0.02, release=0.9, freq_end=69.30)
+                             attack=0.02, release=0.9, freq_end=69.30, rate=MR)
                 toll_track.extend(toll)
-                toll_track.extend([0.0] * max(0, int(bar * SAMPLE_RATE) - len(toll)))
+                toll_track.extend([0.0] * max(0, int(bar * MR) - len(toll)))
             else:
-                toll_track.extend([0.0] * int(bar * SAMPLE_RATE))
+                toll_track.extend([0.0] * int(bar * MR))
 
-        loop = _mix(drone_track, bell_track, toll_track)
+        loop = _upsample2(_mix(drone_track, bell_track, toll_track))
         self.music_sound = self._make_sound(loop)
 
     # ------------------------------------------------------------------

@@ -104,7 +104,8 @@ def get_font(size, bold=False, title=False):
 PLAYER_MAX_HEALTH = 100
 PLAYER_SPEED = 265          # pixels per second
 PLAYER_RADIUS = 16
-PLAYER_HURT_IFRAMES = 0.55  # seconds of invulnerability after being hit
+PLAYER_HURT_IFRAMES = 0.85  # seconds of invulnerability after being hit
+GRACE_SECONDS = 5.0         # calm before the first zombie falls
 
 # ---------------------------------------------------------------------------
 # Weapons
@@ -176,38 +177,38 @@ BOX_LIFETIME = 34.0             # crates fade away after a while (unarmed player
 ZOMBIE_TYPES = {
     "regular": {
         "label": "Regular", "health": 60, "speed": 62, "radius": 18, "points": 10,
-        "damage": 9, "body": (92, 146, 78), "limb": (66, 108, 56), "shirt": (72, 92, 120),
+        "damage": 6, "body": (92, 146, 78), "limb": (66, 108, 56), "shirt": (72, 92, 120),
         "mark": None, "glow": None, "special": False,
     },
     "fast": {
         "label": "Fast", "health": 42, "speed": 122, "radius": 15, "points": 20,
-        "damage": 7, "body": (132, 188, 92), "limb": (96, 146, 66), "shirt": (110, 84, 60),
+        "damage": 5, "body": (132, 188, 92), "limb": (96, 146, 66), "shirt": (110, 84, 60),
         "mark": None, "glow": None, "special": False,
     },
     "strong": {
         "label": "Strong", "health": 135, "speed": 54, "radius": 22, "points": 30,
-        "damage": 15, "body": (74, 122, 100), "limb": (52, 92, 76), "shirt": (58, 66, 84),
+        "damage": 10, "body": (74, 122, 100), "limb": (52, 92, 76), "shirt": (58, 66, 84),
         "mark": None, "glow": None, "special": False,
     },
     "giant": {
         "label": "Giant", "health": 280, "speed": 40, "radius": 31, "points": 50,
-        "damage": 23, "body": (104, 132, 76), "limb": (62, 84, 50), "shirt": (110, 84, 52),
+        "damage": 15, "body": (104, 132, 76), "limb": (62, 84, 50), "shirt": (110, 84, 52),
         "mark": None, "glow": None, "special": False,
     },
     # ---- the three special marked zombies -------------------------------
     "gold": {
         "label": "Gold Marked", "health": 120, "speed": 98, "radius": 20, "points": 100,
-        "damage": 12, "body": (186, 152, 60), "limb": (140, 112, 40), "shirt": (96, 78, 30),
+        "damage": 8, "body": (186, 152, 60), "limb": (140, 112, 40), "shirt": (96, 78, 30),
         "mark": "star", "glow": GOLD, "special": True,
     },
     "red": {
         "label": "Red Marked", "health": 190, "speed": 112, "radius": 22, "points": 200,
-        "damage": 17, "body": (168, 66, 60), "limb": (124, 46, 44), "shirt": (86, 34, 34),
+        "damage": 11, "body": (168, 66, 60), "limb": (124, 46, 44), "shirt": (86, 34, 34),
         "mark": "crown", "glow": RED, "special": True,
     },
     "purple": {
         "label": "Purple Marked", "health": 265, "speed": 126, "radius": 24, "points": 300,
-        "damage": 21, "body": (126, 78, 168), "limb": (94, 56, 128), "shirt": (62, 40, 88),
+        "damage": 14, "body": (126, 78, 168), "limb": (94, 56, 128), "shirt": (62, 40, 88),
         "mark": "diamond", "glow": PURPLE, "special": True,
     },
 }
@@ -220,12 +221,12 @@ ZOMBIE_FALL_START_HEIGHT = (420, 780)   # how high above the ground they appear
 # Difficulty curve
 # ---------------------------------------------------------------------------
 WAVE_DURATION = 24.0            # seconds per wave / level
-SPAWN_INTERVAL_START = 1.55     # seconds between zombie drops on wave 1
+SPAWN_INTERVAL_START = 1.95     # seconds between zombie drops on wave 1
 SPAWN_INTERVAL_MIN = 0.28
 SPAWN_INTERVAL_STEP = 0.11      # subtracted per wave
 SPEED_BONUS_PER_WAVE = 0.055    # +5.5% zombie speed per wave
 HEALTH_BONUS_PER_WAVE = 0.09    # +9% zombie health per wave
-MAX_ZOMBIES_BASE = 8
+MAX_ZOMBIES_BASE = 5
 MAX_ZOMBIES_PER_WAVE = 3
 MAX_ZOMBIES_CAP = 42
 

@@ -47,7 +47,7 @@ from settings import (GAME_TITLE, AUTHOR, VERSION, SCREEN_WIDTH, SCREEN_HEIGHT, 
                       HEALTH_BAD, WEAPONS, ZOMBIE_TYPES, KILLS_PER_WEAPON, CONTROLS,
                       BOX_MAX_ON_FIELD, BOX_SPAWN_INTERVAL, BOX_SPAWN_INTERVAL_UNARMED,
                       BOX_LIFETIME, WAVE_DURATION, HISTORY_SHOW, TOUCH_CONTROLS,
-                      ZOMBIE_ATTACK_COOLDOWN,
+                      ZOMBIE_ATTACK_COOLDOWN, GRACE_SECONDS,
                       STATE_TITLE, STATE_INSTRUCTIONS, STATE_PLAYING, STATE_PAUSED,
                       STATE_GAME_OVER, STATE_HISTORY,
                       spawn_interval_for_wave, max_zombies_for_wave, get_font)
@@ -410,14 +410,33 @@ class Game:
         self.kills = 0
         self.wave = 1
         self.elapsed = 0.0
-        self.spawn_timer = 0.6
-        self.box_timer = 0.4            # first crate arrives almost immediately
+        # Nothing falls for the first few seconds: you start unarmed, and being
+        # swarmed before you can reach a crate is what made runs end in ~14s.
+        self.spawn_timer = GRACE_SECONDS
+        self.box_timer = 2.4            # second crate follows the starting one
         self.banner = None
         self.new_record = False
         self.shake = 0.0
         self.prev_fire = False
 
-        self.set_banner("You are the BLUE player marked YOU  -  W A S D to walk", ACCENT, 6.0)
+        # A crate is placed within reach immediately so the player is never
+        # hunted while completely defenceless.
+        start_x, start_y = random_box_position(self.player.pos,
+                                               min_player_distance=0)
+        toward = pygame.math.Vector2(start_x, start_y) - self.player.pos
+        if toward.length() > 150:
+            toward.scale_to_length(150)
+        first = pygame.math.Vector2(self.player.pos) + toward
+        first.x = max(PLAY_RECT.left + 40, min(PLAY_RECT.right - 40, first.x))
+        first.y = max(PLAY_RECT.top + 40, min(PLAY_RECT.bottom - 40, first.y))
+        self.boxes.append(WeaponBox(first.x, first.y, BOX_LIFETIME * 3))
+
+        if self.touch.enabled:
+            self.set_banner("You are the BLUE player marked YOU  -  "
+                            "drag on the LEFT to walk", ACCENT, 6.0)
+        else:
+            self.set_banner("You are the BLUE player marked YOU  -  W A S D to walk",
+                            ACCENT, 6.0)
 
     # ------------------------------------------------------------------
     # Banner messages under the HUD
