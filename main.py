@@ -130,6 +130,11 @@ def draw_bar(surface, rect, ratio, fill_color, back=(24, 34, 28), border=(70, 96
     pygame.draw.rect(surface, border, rect, 2, border_radius=4)
 
 
+# The title screen's controls panel grows upward from this line; the buttons
+# start just below it.  Keep the two in step.
+TITLE_PANEL_BOTTOM = 482
+
+
 # ===========================================================================
 class Button:
     """A clickable UI button with hover and press feedback."""
@@ -364,14 +369,14 @@ class Game:
                                    "II", "pause", color=GOLD)
         self.buttons = {
             STATE_TITLE: [
-                Button((cx - 330, 470, 300, 62), "START GAME", "start",
-                       key_hint="Enter / Space"),
-                Button((cx + 30, 470, 300, 62), "HOW TO PLAY", "instructions",
-                       color=GOLD, key_hint="I"),
-                Button((cx - 330, 546, 300, 56), "SCORE HISTORY", "history",
-                       color=PURPLE, key_hint="H"),
-                Button((cx + 30, 546, 300, 56), "QUIT", "quit",
-                       color=RED, key_hint="Esc"),
+                Button((cx - 330, TITLE_PANEL_BOTTOM + 16, 300, 62), "START GAME",
+                       "start", key_hint="Enter / Space"),
+                Button((cx + 30, TITLE_PANEL_BOTTOM + 16, 300, 62), "HOW TO PLAY",
+                       "instructions", color=GOLD, key_hint="I"),
+                Button((cx - 330, TITLE_PANEL_BOTTOM + 92, 300, 56), "SCORE HISTORY",
+                       "history", color=PURPLE, key_hint="H"),
+                Button((cx + 30, TITLE_PANEL_BOTTOM + 92, 300, 56), "QUIT",
+                       "quit", color=RED, key_hint="Esc"),
             ],
             STATE_INSTRUCTIONS: [
                 Button((cx - 150, SCREEN_HEIGHT - 84, 300, 56), "BACK TO MENU", "title",
@@ -382,8 +387,8 @@ class Game:
                        key_hint="Esc"),
             ],
             STATE_PAUSED: [
-                Button((cx - 320, 470, 300, 60), "RESUME", "resume", key_hint="P"),
-                Button((cx + 20, 470, 300, 60), "MAIN MENU", "title",
+                Button((cx - 320, 516, 300, 60), "RESUME", "resume", key_hint="P"),
+                Button((cx + 20, 516, 300, 60), "MAIN MENU", "title",
                        color=GOLD, key_hint="Esc"),
             ],
             STATE_GAME_OVER: [
@@ -1085,7 +1090,9 @@ class Game:
                 self.f_tiny, (150, 230, 170), (hx, 82))
 
         # --- banner message ----------------------------------------------------
-        if self.banner:
+        # Only while actually playing: otherwise it shows through the PAUSED and
+        # GAME OVER overlays and collides with their headlines.
+        if self.banner and self.state == STATE_PLAYING:
             text, color, remaining, total = self.banner
             alpha = 255 if remaining > 0.6 else int(255 * (remaining / 0.6))
             font = self.f_ui
@@ -1134,30 +1141,37 @@ class Game:
         pulse = (math.sin(self.menu_time * 2.2) + 1) * 0.5
         title_color = (200 + int(40 * pulse), 60 + int(30 * pulse), 55)
         draw_big_title(surface, "ZOMBIE WAR", self.f_title, title_color,
-                       (SCREEN_WIDTH // 2, 108), spacing=8)
+                       (SCREEN_WIDTH // 2, 96), spacing=8)
         draw_text(surface, "SURVIVE THE RAINFOREST", self.f_mid, ACCENT,
-                  (SCREEN_WIDTH // 2, 168), align="center")
+                  (SCREEN_WIDTH // 2, 154), align="center")
         draw_text(surface, "built by {}".format(AUTHOR), self.f_small, (190, 208, 194),
-                  (SCREEN_WIDTH // 2, 204), align="center")
+                  (SCREEN_WIDTH // 2, 188), align="center")
 
         # --- high score badge -----------------------------------------------
-        badge = pygame.Rect(SCREEN_WIDTH // 2 - 170, 226, 340, 46)
+        badge = pygame.Rect(SCREEN_WIDTH // 2 - 170, 208, 340, 46)
         draw_panel(surface, badge, fill=(16, 30, 22), edge=GOLD, alpha=200)
         draw_text(surface, "HIGH SCORE   {:,}".format(self.scores.high_score),
                   self.f_ui, GOLD, badge.center, align="center")
 
         # --- controls -----------------------------------------------------------
-        panel = pygame.Rect(SCREEN_WIDTH // 2 - 340, 288, 680, 166)
-        draw_panel(surface, panel)
+        # The panel is sized from its contents and anchored by its BOTTOM edge,
+        # just above the buttons.  A fixed height silently pushed the last row
+        # out of the box as soon as a control was added to the list.
         touch_mode = self.touch.enabled
+        rows = TOUCH_CONTROLS if touch_mode else CONTROLS
+        row_h, header_h, pad = 20, 48, 18
+        panel_h = header_h + len(rows) * row_h + pad
+        panel = pygame.Rect(SCREEN_WIDTH // 2 - 340,
+                            TITLE_PANEL_BOTTOM - panel_h, 680, panel_h)
+        draw_panel(surface, panel)
         draw_text(surface, "TOUCH CONTROLS" if touch_mode else "CONTROLS",
                   self.f_ui, WHITE, (panel.centerx, panel.y + 20), align="center")
-        y = panel.y + 48
-        for keys, description in (TOUCH_CONTROLS if touch_mode else CONTROLS):
+        y = panel.y + header_h
+        for keys, description in rows:
             draw_text(surface, keys, self.f_small, ACCENT, (panel.x + 26, y))
             draw_text(surface, description, self.f_small, (206, 218, 208),
                       (panel.x + 300, y))
-            y += 20
+            y += row_h
 
         for button in self.buttons[STATE_TITLE]:
             button.draw(surface)
@@ -1317,21 +1331,25 @@ class Game:
         draw_text(surface, "Take a breath - the jungle will wait.", self.f_ui,
                   (200, 216, 204), (SCREEN_WIDTH // 2, 216), align="center")
 
-        panel = pygame.Rect(SCREEN_WIDTH // 2 - 340, 256, 680, 190)
+        # Same rule as the title screen: size the panel from its contents so a
+        # new control line can never spill out of the box.
+        rows = TOUCH_CONTROLS if self.touch.enabled else CONTROLS
+        row_h, header_h, pad = 21, 54, 18
+        panel_h = header_h + len(rows) * row_h + pad
+        panel = pygame.Rect(SCREEN_WIDTH // 2 - 340, 250, 680, panel_h)
         draw_panel(surface, panel)
-        y = panel.y + 20
         draw_text(surface, "TOUCH CONTROLS" if self.touch.enabled else "CONTROLS",
-                  self.f_ui, GOLD, (panel.centerx, y), align="center")
-        y += 34
-        for keys, description in (TOUCH_CONTROLS if self.touch.enabled else CONTROLS):
+                  self.f_ui, GOLD, (panel.centerx, panel.y + 20), align="center")
+        y = panel.y + header_h
+        for keys, description in rows:
             draw_text(surface, keys, self.f_small, ACCENT, (panel.x + 30, y))
             draw_text(surface, description, self.f_small, (206, 218, 208), (panel.x + 300, y))
-            y += 21
+            y += row_h
 
         stats = "Score {:,}     Kills {}     Wave {}     Weapon {}".format(
             self.score, self.kills, self.wave, self.player.weapon_name)
         draw_text(surface, stats, self.f_ui, WHITE,
-                  (SCREEN_WIDTH // 2, 452), align="center")
+                  (SCREEN_WIDTH // 2, panel.bottom + 26), align="center")
 
         for button in self.buttons[STATE_PAUSED]:
             button.draw(surface)
