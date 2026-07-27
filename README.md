@@ -284,7 +284,8 @@ modified by the build.
 
 | | Desktop | Browser |
 | --- | --- | --- |
-| First start | instant | slow — it downloads Python 3.12 + pygame-ce (~1.5 MB) from the pygame-web CDN, so allow up to a minute the first time; later visits are cached |
+| First start | instant | a few seconds — it downloads the Python 3.12 + pygame WebAssembly runtime (~21 MB), served from this site with a one-year cache |
+| Later starts | instant | much quicker: the runtime comes straight from the browser cache |
 | Sound | plays immediately | starts only after you click the "start" splash (browsers block audio until you interact) |
 | Saved scores | `scores.json` next to the game | the browser's `localStorage`, so scores are per-browser and separate from the desktop ones |
 | Fonts | your system monospace font | a bundled fallback font — text is slightly wider/narrower in places |
@@ -294,6 +295,23 @@ the desktop: the game loop in `main.py` is an `async` coroutine that awaits
 `asyncio.sleep(0)` every frame (a blocking `while` loop would freeze the browser
 tab), and `score_manager.py` detects `sys.platform == "emscripten"` and switches
 to `localStorage`.
+
+### Why the runtime is mirrored
+
+`build_web.py` copies pygbag's ~21 MB CPython + pygame WebAssembly runtime into
+`/cdn/` in the deployment, and `vercel.json` serves it with a one-year
+immutable cache. The public pygame-web CDN sends `cache-control: max-age=600`,
+so without this a browser re-downloads all 21 MB roughly every ten minutes —
+which on a phone is the entire loading time. Measured in a browser:
+
+| | time to game | requests from network | from cache |
+| --- | --- | --- | --- |
+| First visit | 6.5s | 19 | 0 |
+| Repeat visit | 3.0s | 5 | 13 |
+
+The file list in `CDN_FILES` was captured from a real browser session rather
+than guessed. If a future pygbag version changes it, the build fails loudly
+with the missing URL instead of shipping a broken game.
 
 **If the deployed link asks visitors to log in**, the project has Vercel
 Deployment Protection switched on. Turn it off in the Vercel dashboard:
