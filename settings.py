@@ -10,6 +10,7 @@ only stores data plus two tiny helpers (font cache + zombie type picker).
 
 import os
 import random
+import sys
 
 import pygame
 
@@ -82,6 +83,9 @@ TITLE_FONT_STACK = "impact,haettenschweiler,arialblack,dejavusans,arial"
 _FONT_CACHE = {}
 
 
+IS_WEB = (sys.platform == "emscripten")
+
+
 def get_font(size, bold=False, title=False):
     """Return a cached pygame Font.  Falls back to the built-in font safely."""
     key = (size, bold, title)
@@ -91,7 +95,13 @@ def get_font(size, bold=False, title=False):
     if not pygame.font.get_init():          # be safe if called very early
         pygame.font.init()
     try:
-        font = pygame.font.SysFont(TITLE_FONT_STACK if title else FONT_STACK, size, bold=bold)
+        if IS_WEB:
+            # A browser has no system fonts to match against, so asking
+            # SysFont to search for one is pure start-up cost.
+            font = pygame.font.Font(None, size)
+        else:
+            font = pygame.font.SysFont(TITLE_FONT_STACK if title else FONT_STACK,
+                                       size, bold=bold)
     except Exception:                        # pragma: no cover - very rare
         font = pygame.font.Font(None, size)
     _FONT_CACHE[key] = font

@@ -161,6 +161,131 @@ MOBILE_VIEWPORT = ('<meta name="viewport" content="width=device-width, '
                    'initial-scale=1.0, maximum-scale=1.0, user-scalable=no, '
                    'viewport-fit=cover">')
 
+# A couple of runtime URLs (the package index and the pygame wheel) are built
+# inside pygbag's own packed filesystem, so rewriting index.html cannot reach
+# them.  This shim redirects them to our mirror at the network layer instead.
+# It is inlined in <head>, and pygbag's loader is async/defer, so it is always
+# installed before the first runtime fetch happens.
+CDN_REWRITE_JS = """
+<script id="zw-cdn-rewrite">
+(function () {
+  var FROM = "https://pygame-web.github.io/cdn/";
+  var TO = "/cdn/";
+  function fix(url) {
+    return (typeof url === "string" && url.indexOf(FROM) === 0)
+      ? TO + url.slice(FROM.length) : url;
+  }
+  var origFetch = window.fetch;
+  if (origFetch) {
+    window.fetch = function (input, init) {
+      try {
+        if (typeof input === "string") {
+          input = fix(input);
+        } else if (input && typeof input.url === "string") {
+          var fixed = fix(input.url);
+          if (fixed !== input.url) { input = new Request(fixed, input); }
+        }
+      } catch (e) { /* fall through with the original request */ }
+      return origFetch.call(this, input, init);
+    };
+  }
+  var origOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    try { arguments[1] = fix(url); } catch (e) { /* ignore */ }
+    return origOpen.apply(this, arguments);
+  };
+})();
+</script>
+"""
+
+
+# ---------------------------------------------------------------------------
+# Self-hosting the Python runtime
+# ---------------------------------------------------------------------------
+# pygbag loads ~21 MB of CPython + pygame WebAssembly from pygame-web.github.io,
+# and that CDN sends "cache-control: max-age=600" - so a browser re-downloads
+# all of it ten minutes later. On a phone that is the entire loading time.
+#
+# We mirror those files into the deployment instead and serve them with a
+# one-year immutable cache (see vercel.json), so the runtime downloads once and
+# every later visit starts almost instantly.
+#
+# The list is not guesswork: it is every pygame-web URL the game actually
+# requests during a full boot, captured from a real browser session.
+CDN_ORIGIN = "https://pygame-web.github.io/cdn/"
+CDN_LOCAL_PREFIX = "/cdn/"
+CDN_FILES = [
+    "0.9.3/pythons.js",
+    "0.9.3/cpythonrc.py",
+    "0.9.3/empty.html",
+    "0.9.3/empty.ogg",
+    "0.9.3/cpython312/main.js",
+    "0.9.3/cpython312/main.data",
+    "0.9.3/cpython312/main.wasm",
+    "cp312/pygame_ce-2.5.7-cp312-cp312-wasm32_bi_emscripten.whl",
+    "index-0.9.3-cp312.json",
+    "vtx.js",
+    "vt/xterm.js",
+    "vt/xterm.css",
+    "vt/xterm-addon-image.js",
+]
+# Registered as a service worker; harmless if the CDN ever drops it.
+# browserfs 404s on the public CDN as well (that is the harmless
+# "BrowserFS not found" console message), so it is optional here too.
+CDN_OPTIONAL = ["0.9.3/pygbag0.9.3.js", "0.9.3/favicon.png",
+                "0.9.3/browserfs.min.js"]
+
+CDN_CACHE = os.path.join(HERE, "web_build", "cdn-cache")
+
+
+def mirror_cdn(output_dir):
+    """Copy the pygbag runtime into <output>/cdn/ so we can cache it ourselves."""
+    import urllib.request
+
+    os.makedirs(CDN_CACHE, exist_ok=True)
+    total = 0
+    for rel in CDN_FILES + CDN_OPTIONAL:
+        optional = rel in CDN_OPTIONAL
+        cached = os.path.join(CDN_CACHE, rel.replace("/", "__"))
+        target = os.path.join(output_dir, "cdn", *rel.split("/"))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+
+        if not os.path.isfile(cached) or os.path.getsize(cached) == 0:
+            url = CDN_ORIGIN + rel
+            try:
+                with urllib.request.urlopen(url, timeout=120) as response:
+                    data = response.read()
+                if not data:
+                    raise ValueError("empty response")
+                with open(cached, "wb") as fh:
+                    fh.write(data)
+            except Exception as exc:
+                if optional:
+                    print("   (skipped optional {}: {})".format(rel, exc))
+                    continue
+                raise SystemExit(
+                    "Could not mirror {} ({}). The game would still work from the\n"
+                    "public CDN, but loading would stay slow. Re-run the build, or\n"
+                    "remove it from CDN_FILES to fall back.".format(url, exc))
+
+        shutil.copy2(cached, target)
+        total += os.path.getsize(target)
+
+    # The package manifest points at the CDN for wheels; repoint it at us.
+    manifest = os.path.join(output_dir, "cdn", "index-0.9.3-cp312.json")
+    if os.path.isfile(manifest):
+        try:
+            with open(manifest, "r", encoding="utf-8") as fh:
+                text = fh.read()
+            text = text.replace(CDN_ORIGIN, CDN_LOCAL_PREFIX)
+            with open(manifest, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        except OSError as exc:
+            print("   (could not repoint the package manifest: {})".format(exc))
+
+    print("mirrored the Python runtime: {} files, {:.1f} MB (cached in {})".format(
+        len(CDN_FILES) + len(CDN_OPTIONAL), total / 1024.0 / 1024.0, CDN_CACHE))
+
 
 def patch_index_for_mobile(index_path):
     """Add a mobile viewport + touch-action CSS to pygbag's generated page."""
@@ -174,7 +299,11 @@ def patch_index_for_mobile(index_path):
     if "zombiewar-mobile" in html:
         return                                    # already patched
 
-    injection = MOBILE_CSS
+    # Load the Python runtime from our own /cdn/ mirror instead of
+    # pygame-web.github.io (see mirror_cdn).
+    html = html.replace(CDN_ORIGIN, CDN_LOCAL_PREFIX)
+
+    injection = CDN_REWRITE_JS + MOBILE_CSS
     if "name=\"viewport\"" not in html and "name='viewport'" not in html:
         injection = MOBILE_VIEWPORT + injection
 
@@ -217,6 +346,7 @@ def build():
     if not os.path.isfile(os.path.join(OUTPUT, "index.html")):
         raise SystemExit("pygbag finished but {}/index.html is missing".format(OUTPUT))
 
+    mirror_cdn(OUTPUT)
     patch_index_for_mobile(os.path.join(OUTPUT, "index.html"))
 
     total = 0

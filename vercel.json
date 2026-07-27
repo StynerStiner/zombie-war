@@ -6,5 +6,25 @@
   "installCommand": "echo 'no npm dependencies - this is a Python project'",
   "github": {
     "silent": false
-  }
+  },
+  "headers": [
+    {
+      "source": "/cdn/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/(zombiewar.apk|zombiewar.tar.gz|index.html)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
 }

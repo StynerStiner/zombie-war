@@ -25,6 +25,7 @@ import math
 import os
 import random
 import sys
+import time
 import traceback
 
 # True when running in a browser through pygbag / Pyodide (WebAssembly build).
@@ -263,19 +264,15 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        # ---- systems ---------------------------------------------------
-        self.audio = Audio(enabled=True)
-        if headless:
-            # The self-test must never touch the player's real score file.
-            import tempfile
-            self.scores = ScoreManager(os.path.join(tempfile.gettempdir(),
-                                                    "zombiewar_selftest_scores.json"))
-        else:
-            self.scores = ScoreManager()
+        # Systems are created by setup(), which runs one step per frame so the
+        # loading screen can animate instead of the page looking frozen.
+        self.audio = None
+        self.scores = None
         self.effects = EffectManager()
-        self.forest = Rainforest(seed=7)
-        # The world is drawn onto this surface so it can be shaken on impact.
-        self.world_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)).convert()
+        self.forest = None
+        self.world_surface = None
+        self.ready = False
+        self._boot_t0 = time.perf_counter()
 
         # ---- fonts -----------------------------------------------------
         self.f_title = get_font(78, bold=True)      # drawn via draw_big_title()
@@ -321,12 +318,108 @@ class Game:
         self.new_record = False
         self.shake = 0.0              # screen-shake strength, 0.0 - 1.0
         self.force_fire = False       # used by the automated self-test
-        self.reset_game()
         # Music is started after the first frame is on screen (see run()), so
         # generating the loop never delays the title screen appearing.
         self._music_started = False
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Start-up, one step per frame
+    # ------------------------------------------------------------------
+    async def setup(self):
+        """
+        Build the heavy systems, painting a loading screen between each step.
+
+        Doing this in __init__ meant the browser showed a frozen page for the
+        whole start-up.  Yielding after every step lets the page repaint, so
+        the player watches a progress bar instead of nothing.
+        """
+        steps = (
+            ("Waking the rainforest", self._boot_world),
+            ("Summoning the horde", self._boot_gameplay),
+            ("Tuning the haunting", self._boot_audio),
+            ("Reading your scores", self._boot_scores),
+        )
+        for index, (label, step) in enumerate(steps):
+            self.draw_loading(label, index / float(len(steps)))
+            await asyncio.sleep(0)          # let the browser actually paint
+            step()
+            self._boot_mark(label)
+        self.draw_loading("Ready", 1.0)
+        await asyncio.sleep(0)
+        self.ready = True
+        self._boot_mark("TOTAL")
+        return self
+
+    def setup_blocking(self):
+        """Synchronous setup, used by the headless self-test."""
+        for step in (self._boot_world, self._boot_gameplay,
+                     self._boot_audio, self._boot_scores):
+            step()
+        self.ready = True
+        return self
+
+    def _boot_world(self):
+        self.forest = Rainforest(seed=7)
+        # The world is drawn onto this surface so it can be shaken on impact.
+        self.world_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)).convert()
+
+    def _boot_gameplay(self):
+        self.reset_game()
+
+    def _boot_audio(self):
+        self.audio = Audio(enabled=True)
+
+    def _boot_scores(self):
+        if self.headless:
+            # The self-test must never touch the player's real score file.
+            import tempfile
+            self.scores = ScoreManager(os.path.join(tempfile.gettempdir(),
+                                                    "zombiewar_selftest_scores.json"))
+        else:
+            self.scores = ScoreManager()
+
+    def _boot_mark(self, label):
+        """
+        Record start-up timings so slow phases can be found on a real device.
+
+        In the browser Python's print() goes to pygbag's own terminal, not the
+        page console, so the mark is pushed to the JS console directly.
+        """
+        if not IS_WEB:
+            return
+        message = "[boot] {:>22}  {:6.0f} ms".format(
+            label, (time.perf_counter() - self._boot_t0) * 1000.0)
+        try:
+            import platform as _platform
+            getattr(_platform, "window").console.log(message)
+        except Exception:
+            print(message)
+
+    def draw_loading(self, message, progress):
+        """A branded loading frame drawn with the same shapes as the game."""
+        try:
+            surface = self.screen
+            surface.fill((11, 19, 16))
+
+            cx = SCREEN_WIDTH // 2
+            pulse = (math.sin(time.perf_counter() * 3.0) + 1) * 0.5
+            draw_big_title(surface, "ZOMBIE WAR", self.f_title,
+                           (200 + int(40 * pulse), 60, 55), (cx, 250), spacing=8)
+            draw_text(surface, "built by {}".format(AUTHOR), self.f_small,
+                      (150, 172, 156), (cx, 306), align="center")
+
+            bar = pygame.Rect(cx - 260, 372, 520, 22)
+            draw_bar(surface, bar, max(0.04, min(1.0, progress)), ACCENT)
+            draw_text(surface, message, self.f_ui, (206, 220, 210),
+                      (cx, 424), align="center")
+            draw_text(surface, "first visit downloads the Python runtime - "
+                               "later visits are much quicker",
+                      self.f_tiny, (110, 132, 118), (cx, 462), align="center")
+            pygame.display.flip()
+        except pygame.error:
+            pass                    # never let the splash break start-up
+
     def _detect_touch_device(self):
         """
         Switch to touch mode straight away on a phone or tablet.
@@ -1491,7 +1584,7 @@ def run_self_test(frames=1400, verbose=True):
         if verbose:
             print("[selftest] {}".format(msg))
 
-    game = Game(headless=True)
+    game = Game(headless=True).setup_blocking()
     dt = 1.0 / 60.0
     say("window + systems started ({} sounds generated)".format(len(game.audio.sounds)))
 
@@ -1736,7 +1829,9 @@ async def main():
         return run_self_test(frames)
 
     try:
-        await Game().run()
+        game = Game()
+        await game.setup()          # staged start-up with a loading screen
+        await game.run()
     except SystemExit:
         raise
     except Exception:
