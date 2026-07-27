@@ -1288,20 +1288,19 @@ class Game:
         draw_text(surface, "MISSION", self.f_ui, GOLD, (left.x + 22, y)); y += 30
         for line in [
             "Zombies rain out of the sky and hunt you down.",
-            "Stay alive, grab weapons, and score as high as you can.",
+            "Stay alive, grab weapons, score as high as you can.",
             "",
             "BUDDY, your teammate, follows you and shoots too.",
-            "If he is downed he gets back up after a few seconds.",
+            "If he is downed he gets back up a few seconds later.",
             "",
             "You start with NO weapon. Run to a glowing crate.",
-            "Each crate gives you a RANDOM weapon - you cannot pick.",
+            "Each crate gives a RANDOM weapon - you cannot pick.",
+            "Every weapon disappears after {} kills, then you must".format(
+                KILLS_PER_WEAPON),
+            "find another crate. The counter restarts each time.",
             "",
-            "Every weapon disappears after {} kills.".format(KILLS_PER_WEAPON),
-            "Then you must find another crate. The counter restarts",
-            "with every new weapon.",
-            "",
-            "Zombies get faster, tougher and more numerous every",
-            "{} seconds (one wave).".format(int(WAVE_DURATION)),
+            "Zombies get faster and more numerous every {} seconds.".format(
+                int(WAVE_DURATION)),
         ]:
             draw_text(surface, line, self.f_small, (212, 224, 214), (left.x + 22, y))
             y += 21
@@ -1343,10 +1342,10 @@ class Game:
             color = data["glow"] if data["special"] else (200, 214, 202)
             pygame.draw.circle(surface, data["body"], (right.x + 32, y + 8), 9)
             pygame.draw.circle(surface, (20, 30, 22), (right.x + 32, y + 8), 9, 2)
-            draw_text(surface, data["label"] + " zombie", self.f_small, WHITE,
+            draw_text(surface, data["label"], self.f_small, WHITE,
                       (right.x + 52, y))
             draw_text(surface, "{} pts".format(data["points"]), self.f_small, color,
-                      (right.x + 272, y))
+                      (right.x + 240, y))
             if data["special"]:
                 draw_text(surface, "special mark: {}".format(data["mark"]),
                           self.f_tiny, color, (right.x + 340, y + 3))

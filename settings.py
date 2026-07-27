@@ -76,7 +76,15 @@ HEALTH_BAD = (226, 74, 68)
 # ---------------------------------------------------------------------------
 # Fonts
 # ---------------------------------------------------------------------------
-# Comma separated list -> pygame picks the first one installed on the machine.
+# The game ships its own font (DejaVu Sans Mono, subset to the characters the
+# game actually draws - 15 KB each).  Bundling it means the browser build looks
+# exactly like the desktop one and never depends on what the machine happens to
+# have installed.  See assets/fonts/LICENSE-DejaVu.txt.
+FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "fonts")
+BUNDLED_REGULAR = os.path.join(FONT_DIR, "DejaVuSansMono.ttf")
+BUNDLED_BOLD = os.path.join(FONT_DIR, "DejaVuSansMono-Bold.ttf")
+
+# Only used if the bundled font is missing.
 FONT_STACK = "consolas,menlo,dejavusansmono,couriernew,monospace"
 TITLE_FONT_STACK = "impact,haettenschweiler,arialblack,dejavusans,arial"
 
@@ -94,8 +102,14 @@ def get_font(size, bold=False, title=False):
         return cached
     if not pygame.font.get_init():          # be safe if called very early
         pygame.font.init()
+    path = BUNDLED_BOLD if bold else BUNDLED_REGULAR
     try:
-        if IS_WEB:
+        if os.path.isfile(path):
+            # Preferred: the font shipped with the game.  It keeps the browser
+            # and the desktop looking identical, and avoids pygame's built-in
+            # font, whose kerning renders "CONTROLS" as "CON TROLS".
+            font = pygame.font.Font(path, size)
+        elif IS_WEB:
             # A browser has no system fonts to match against, so asking
             # SysFont to search for one is pure start-up cost.
             font = pygame.font.Font(None, size)
@@ -291,21 +305,25 @@ STATE_PAUSED = "paused"
 STATE_GAME_OVER = "game_over"
 STATE_HISTORY = "history"
 
+# Descriptions are kept short on purpose: they are drawn in a fixed column
+# inside a panel, and anything much longer than ~28 characters runs off the
+# right-hand edge of the box.
 CONTROLS = [
-    ("W A S D  /  Arrow Keys", "Walk around the rainforest"),
-    ("SPACEBAR  /  Left Click", "Shoot toward the mouse cursor"),
+    ("W A S D  /  Arrows", "Walk around the rainforest"),
+    ("SPACE  /  Left Click", "Shoot at the mouse cursor"),
     ("MOUSE", "Aim your weapon"),
-    ("P", "Pause / resume the game"),
+    ("P", "Pause / resume"),
     ("R", "Restart after game over"),
-    ("M   and   - / =", "Mute, and turn the sound down / up"),
-    ("ESC", "Back to menu  (quit from the title screen)"),
+    ("M      - / =", "Mute / volume down / up"),
+    ("ESC", "Back to menu"),
 ]
 
 # Shown instead of the list above once a touch screen is detected.
 TOUCH_CONTROLS = [
-    ("DRAG - left half", "Walk: a thumb-stick appears under your thumb"),
+    ("DRAG - left half", "Walk (thumb-stick appears)"),
+    ("FIRE button", "Shoot the nearest zombie"),
     ("HOLD - right half", "Aim and shoot at that spot"),
-    ("BOTH AT ONCE", "Walk and shoot at the same time"),
-    ("II  button (top right)", "Pause the game"),
-    ("TAP a button", "Choose it  (tap anywhere here to start)"),
+    ("BOTH AT ONCE", "Walk and shoot together"),
+    ("II button (top right)", "Pause the game"),
+    ("TAP a button", "Choose it"),
 ]
