@@ -270,7 +270,7 @@ extra permission and the runner needs its own credential:
 gh auth refresh -h github.com -s workflow            # allow workflow files
 mkdir -p .github/workflows
 cp docs/github-actions-vercel-deploy.yml .github/workflows/deploy.yml
-gh secret set VERCEL_TOKEN --repo stynerdev225/zombie-war   # paste a token from
+gh secret set VERCEL_TOKEN --repo StynerStiner/zombie-war   # paste a token from
                                                             # vercel.com/account/tokens
 git add .github && git commit -m "Deploy from GitHub Actions" && git push
 ```
